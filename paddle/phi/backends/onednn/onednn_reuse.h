@@ -627,7 +627,7 @@ class OneDNNHandlerNoCachingT {
                                        dnnl::primitive_attr>::value>::type
   CreateForwardPrimitiveDescriptor(First&& first, Args&&... args) {
     fwd_pd_ = std::make_shared<typename TForward::primitive_desc>(
-        std::forward<Args>(args)..., first, engine_);
+        engine_, std::forward<Args>(args)..., first);
   }
 
   template <class First, class... Args>
@@ -635,7 +635,7 @@ class OneDNNHandlerNoCachingT {
                                         dnnl::primitive_attr>::value>::type
   CreateForwardPrimitiveDescriptor(First&& first, Args&&... args) {
     fwd_pd_ = std::make_shared<typename TForward::primitive_desc>(
-        std::forward<First>(first), std::forward<Args>(args)..., engine_);
+        engine_, std::forward<First>(first), std::forward<Args>(args)...);
   }
 
   template <typename... Args>
@@ -1215,14 +1215,12 @@ class ReductionOneDNNHandler
     const auto out_md = memory::desc(
         out_tz, OneDNNGetDataType<T>(), dnnl::memory::format_tag::any);
 
-    if (attrs) {
-      // TODO(jczaja): use common function if applicable
-      this->fwd_pd_ = std::make_shared<dnnl::reduction::primitive_desc>(
-          engine, algo, x->mem_desc(), x->mem_desc(), p, eps, attrs);
-    } else {
-      this->fwd_pd_ = std::make_shared<dnnl::reduction::primitive_desc>(
-          engine, algo, x->mem_desc(), x->mem_desc(), p, eps);
-    }
+    if (attrs)
+      this->AcquireForwardPrimitiveDescriptor(
+          attrs, algo, x->mem_desc(), out_md, p, eps);
+    else
+      this->AcquireForwardPrimitiveDescriptor(
+          algo, x->mem_desc(), out_md, p, eps);
   }
 };
 
