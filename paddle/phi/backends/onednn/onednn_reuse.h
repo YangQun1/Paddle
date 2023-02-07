@@ -1679,14 +1679,12 @@ class SoftplusOneDNNHandler : public OneDNNHandlerNoCachingT<T, dnnl::binary> {
       : OneDNNHandlerNoCachingT<T, dnnl::binary>(dev_ctx.GetEngine(),
                                                  dev_ctx.GetPlace()) {
     dnnl::post_ops post_ops;
-    post_ops.append_eltwise(
-        1.0f, dnnl::algorithm::eltwise_soft_relu, 0.0f, 0.0f);
+    post_ops.append_eltwise(dnnl::algorithm::eltwise_soft_relu, 0.0f, 0.0f);
     if (beta != 1.0f) {
       post_ops.append_eltwise(
-          1.0f, dnnl::algorithm::eltwise_linear, 1.0f / beta, 0.0f);
+          dnnl::algorithm::eltwise_linear, 1.0f / beta, 0.0f);
     }
-    AppendActivation(
-        dev_ctx, post_ops, 1.0f, fuse_activation, fuse_alpha, fuse_beta);
+    AppendActivation(dev_ctx, post_ops, fuse_activation, fuse_alpha, fuse_beta);
     dnnl::primitive_attr attrs;
     attrs.set_post_ops(post_ops);
 
@@ -1696,7 +1694,7 @@ class SoftplusOneDNNHandler : public OneDNNHandlerNoCachingT<T, dnnl::binary> {
     // else, then:
     //    x->dims() == x->mem_desc().dims()
     // so, we can directly use x->mem_desc().dims() here
-    auto x_tz = x->mem_desc().dims();
+    auto x_tz = x->mem_desc().get_dims();
     auto beta_tz = std::vector<int64_t>(x_tz.size(), 1);
     auto beta_md = dnnl::memory::desc(
         beta_tz, OneDNNGetDataType<T>(), GetPlainOneDNNFormat(x_tz.size()));
