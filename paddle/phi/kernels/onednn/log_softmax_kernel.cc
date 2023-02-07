@@ -34,12 +34,16 @@ class LogSoftmaxOneDNNHandler
                                                                  cpu_place) {
     const int rank = x.dims().size() != 0 ? x.dims().size() : 1;
     const int canonical_axis = funcs::CanonicalAxis(axis, rank);
-    this->AcquireForwardPrimitiveDescriptor(onednn_engine,
-                                            dnnl::prop_kind::forward_inference,
-                                            dnnl::algorithm::softmax_log,
-                                            x.mem_desc(),
-                                            x.mem_desc(),
-                                            canonical_axis);
+    // Softmax is having diffrent order of params
+    // TODO(jczaja): try to have a common function for PD with engine on
+    // begining
+    this->fwd_pd_ = std::make_shared<dnnl::softmax_forward::primitive_desc>(
+        onednn_engine,
+        dnnl::prop_kind::forward_inference,
+        dnnl::algorithm::softmax_log,
+        x.mem_desc(),
+        x.mem_desc(),
+        canonical_axis);
   }
 };
 
