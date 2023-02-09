@@ -792,8 +792,11 @@ class SoftmaxOneDNNHandler
 
     int rank = x->dims().size() != 0 ? x->dims().size() : 1;
     const int canonical_axis = funcs::CanonicalAxis(axis, rank);
-    this->AcquireForwardPrimitiveDescriptor(
-        dnnl::prop_kind::forward_inference, x->mem_desc(), canonical_axis);
+    this->AcquireForwardPrimitiveDescriptor(dnnl::prop_kind::forward_inference,
+                                            dnnl::algorithm::softmax_accurate,
+                                            x->mem_desc(),
+                                            x->mem_desc(),
+                                            canonical_axis);
   }
 
   SoftmaxOneDNNHandler(const dnnl::engine onednn_engine,
