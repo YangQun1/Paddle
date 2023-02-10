@@ -1320,6 +1320,7 @@ class BatchNormOneDNNHandler
         global_stats ? dnnl::prop_kind::forward_inference
                      : dnnl::prop_kind::forward_training,
         x->mem_desc(),
+        x->mem_desc(),
         epsilon,
         flags);
   }
@@ -1344,6 +1345,7 @@ class BatchNormOneDNNHandler
 
     this->AcquireForwardPrimitiveDescriptor(
         dnnl::prop_kind::forward_training,
+        in_x->mem_desc(),
         in_x->mem_desc(),
         epsilon,
         dnnl::normalization_flags::use_scale |
