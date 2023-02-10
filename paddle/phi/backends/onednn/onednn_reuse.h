@@ -1495,6 +1495,8 @@ class PoolingOneDNNHandler
                        ? PADDLE_GET_CONST(bool, dev_ctx.GetDnnAttr("is_test"))
                        : false;
 
+    memory::dims dilation = {1, 1};  // dilation (no PP support)
+
     this->AcquireForwardPrimitiveDescriptor(
         is_test ? dnnl::prop_kind::forward_inference
                 : dnnl::prop_kind::forward_training,
@@ -1506,7 +1508,7 @@ class PoolingOneDNNHandler
         dst_md,
         copied_strides,
         copied_kernel_size,
-        {1, 1},  // dilation (no PP support)
+        dilation,  // dilation (no PP support)
         onednn_paddings[0],
         onednn_paddings[1]);
   }
@@ -1581,6 +1583,7 @@ class PoolingOneDNNHandler
       ComputeAdaptivePoolParameters(
           diff_src_tz, &copied_kernel_size, &copied_strides);
     }
+    memory::dims dilation = {1, 1};  // dilation (no PP support)
 
     this->AcquireForwardPrimitiveDescriptor(
         dnnl::prop_kind::forward_training,
@@ -1592,7 +1595,7 @@ class PoolingOneDNNHandler
         dst_md,
         copied_strides,
         copied_kernel_size,
-        {1, 1},  // dilation (no PP support)
+        dilation,
         onednn_paddings[0],
         onednn_paddings[1]);
 
@@ -1605,6 +1608,7 @@ class PoolingOneDNNHandler
         out_grad->mem_desc(),
         copied_strides,
         copied_kernel_size,
+        dilation,
         onednn_paddings[0],
         onednn_paddings[1]);
   }
