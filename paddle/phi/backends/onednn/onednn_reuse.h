@@ -459,10 +459,6 @@ class OneDNNHandlerT {
         dev_ctx_.SetBlob(key_reorder_p, reorder_p);
 
         auto& astream = OneDNNContext::tls().get_stream();
-        reorder_p->execute(
-            astream,
-            {{DNNL_ARG_FROM, *user_memory_p}, {DNNL_ARG_TO, *target_memory_p}});
-
         std::unordered_map<int, dnnl::memory> reorder_args;
         reorder_args.insert({DNNL_ARG_SRC, *user_memory_p});
         reorder_args.insert({DNNL_ARG_DST, *target_memory_p});
