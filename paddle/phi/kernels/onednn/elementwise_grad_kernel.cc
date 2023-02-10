@@ -56,7 +56,7 @@ inline void AddSubNonBroadcast(
   auto reorder_p =
       reorder_handler->AcquireReorder(dst_memory, src_memory, reorder_attr);
 
-  std::unordered_map<int, memory> args = {
+  std::unordered_map<int, dnnl::memory> args = {
       {DNNL_ARG_SRC, *src_memory},
       {DNNL_ARG_DST, *dst_memory},
       {DNNL_ARG_ATTR_SCALES | DNNL_ARG_DST, scales_memory}};
