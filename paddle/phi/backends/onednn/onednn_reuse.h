@@ -1166,11 +1166,13 @@ class PReluOneDNNHandler
     auto weights_md = memory::desc(
         weights_dims, OneDNNGetDataType<T>(), memory::format_tag::any);
 
-    this->AcquireForwardPrimitiveDescriptor(
-        dnnl::prop_kind::forward_training, x.mem_desc(), weights_md);
+    this->AcquireForwardPrimitiveDescriptor(dnnl::prop_kind::forward_training,
+                                            x.mem_desc(),
+                                            weights_md,
+                                            x.mem_desc());
     if (!is_test) {
       this->AcquireBackwardPrimitiveDescriptor(
-          x.mem_desc(), weights_md, x.mem_desc(), weights_md);
+          x.mem_desc(), weights_md, x.mem_desc(), weights_md, x.mem_desc());
     }
   }
 
