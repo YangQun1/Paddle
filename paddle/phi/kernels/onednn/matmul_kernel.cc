@@ -223,7 +223,11 @@ class MulPrimitiveFactory {
 
     auto &astream = OneDNNContext::tls().get_stream();
     {
-      reorder.execute(astream, src_mem, dst_mem);
+      std::unordered_map<int, dnnl::memory> reorder_args;
+      reorder_args.insert({DNNL_ARG_SRC, src_mem});
+      reorder_args.insert({DNNL_ARG_DST, dst_mem});
+      reorder_args.insert({DNNL_ARG_ATTR_SCALES | DNNL_ARG_DST, scales_mem});
+      reorder.execute(astream, reorder_args);
       astream.wait();
     }
 
@@ -271,7 +275,13 @@ class MulPrimitiveFactory {
             scale_out_data / (scale_x_data * scale_y_data[i]);
     }
     int mul_mask = is_multi_channel ? 1 : 0;
-    mul_attr.set_output_scales(mul_mask, output_shift_scale);
+    mul_attr.set_scales_mask(DNNL_ARG_DST, mul_mask);
+
+    auto scales_md = dnnl::memory::desc(
+        {count}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::x);
+    scales_mem_ = dnnl::memory(scales_md, engine_);
+    auto mem_buf = scales_mem_.get_data_handle();
+    memcpy(mem_buf, output_shift_scale.data(), count * sizeof(float));
 
     return mul_attr;
   }
@@ -305,10 +315,12 @@ class MulPrimitiveFactory {
 
   void Execute() {
     auto &astream = OneDNNContext::tls().get_stream();
+
     (*mul_).execute(astream,
                     {{DNNL_ARG_SRC, *x_input_},
                      {DNNL_ARG_WEIGHTS, *y_input_},
-                     {DNNL_ARG_DST, *output_}});
+                     {DNNL_ARG_DST, *output_},
+                     {DNNL_ARG_ATTR_SCALES | DNNL_ARG_DST, scales_mem_}});
     astream.wait();
   }
 
@@ -425,6 +437,7 @@ class MulPrimitiveFactory {
   paddle::optional<memory> output_;
   paddle::optional<inner_product_forward> mul_;
   static constexpr bool is_int8_ = funcs::is_int8<XT>();
+  dnnl::memory scales_mem_;
 };
 
 /* OT: output data type */
