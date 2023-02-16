@@ -169,7 +169,8 @@ class MatMulV1OneDNNHandler
     auto out_md = memory::desc(
         out_ddims, phi::funcs::OneDNNGetDataType<OT>(), out_strides);
 
-    const dnnl::primitive_attr matmul_attrs = CreateMatmulAttrs(ctx);
+    dnnl::primitive_attr matmul_attrs;
+    std::tie(matmul_attrs, output_scale_) = CreateMatmulAttrs(ctx);
 
     this->AcquireForwardPrimitiveDescriptor(matmul_attrs, x_md, y_md, out_md);
   }
@@ -189,13 +190,14 @@ class MatMulV1OneDNNHandler
     return alpha;
   }
 
-  dnnl::primitive_attr CreateMatmulAttrs(const ExecutionContext &ctx) {
+  std::tuple<dnnl::primitive_attr, float> CreateMatmulAttrs(
+      const ExecutionContext &ctx) {
     dnnl::primitive_attr matmul_attrs;
     dnnl::post_ops post_operations;
 
     float scale_out = ComputeOutputScale(ctx);
     if (scale_out != 1.0f) {
-      matmul_attrs.set_output_scales(0, {scale_out});
+      matmul_attrs.set_scales_mask(DNNL_ARG_DST, 0);
     }
 
     if (ctx.HasInput("ResidualData")) {
@@ -215,11 +217,11 @@ class MatMulV1OneDNNHandler
     if (ctx.HasAttr("fused_output_scale")) {
       float scale_alpha = ctx.Attr<float>("fused_output_scale");
       post_operations.append_eltwise(
-          1.0, dnnl::algorithm::eltwise_linear, scale_alpha, 0.0f);
+          dnnl::algorithm::eltwise_linear, scale_alpha, 0.0f);
     }
 
     matmul_attrs.set_post_ops(post_operations);
-    return matmul_attrs;
+    return std::make_tuple(matmul_attrs, scale_out);
   }
 
   std::shared_ptr<memory> AcquireWeightsMemory(const phi::DenseTensor *input) {
@@ -240,6 +242,22 @@ class MatMulV1OneDNNHandler
     OT *ptr = output->mutable_data<OT>(this->place_);
     return this->AcquireMemoryFromPrimitive(this->fwd_pd_->dst_desc(), ptr);
   }
+
+  dnnl::memory GetOutputScaleMem() {
+    if (output_scale_ != 1.0) {
+      auto scales_md = dnnl::memory::desc(
+          {1}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::x);
+
+      return dnnl::memory(scales_md,
+                          this->engine_,
+                          phi::funcs::to_void_cast<float>(&output_scale_));
+    } else {
+      return dnnl::memory();
+    }
+  }
+
+ private:
+  float output_scale_ = 1.0f;
 };
 
 template <typename XT, typename YT, typename OT>
@@ -283,7 +301,9 @@ class MatMulOneDNNHandler
     auto out_md = memory::desc(out_dims, OneDNNGetDataType<OT>(), out_strides);
 
     dnnl::primitive_attr attrs;
-    if (scale != 1.0f) attrs.set_output_scales(0, {scale});
+    if (scale != 1.0f) {
+      attrs.set_scales_mask(DNNL_ARG_DST, 0);
+    }
 
     this->AcquireForwardPrimitiveDescriptor(attrs, x_md, y_md, out_md);
   }
@@ -706,7 +726,17 @@ class MatMulGradMKLDNNKernel : public paddle::framework::OpKernel<T> {
                                        : FoldFirstAndLastDims<T>(dev_ctx, y);
     }
 
-    MatMulOneDNNHandler<T, T, T> handler(engine,
+    float alpha = ctx.HasAttr("alpha") ? ctx.Attr<float>("alpha") : 1.0f;
+
+    auto alpha_md = dnnl::memory::desc(
+        {1}, dnnl::memory::data_type::f32, dnnl::memory::format_tag::x);
+    auto scale_mem =
+        alpha != 1.0f
+            ? dnnl::memory(
+                  alpha_md, engine, phi::funcs::to_void_cast<float>(&alpha))
+            : dnnl::memory();
+
+    MatMulMKLDNNHandler<T, T, T> handler(engine,
                                          ctx.GetPlace(),
                                          &x_combined,
                                          trans_x,
@@ -725,6 +755,9 @@ class MatMulGradMKLDNNKernel : public paddle::framework::OpKernel<T> {
         {DNNL_ARG_SRC, *src_memory_p},
         {DNNL_ARG_WEIGHTS, *weights_memory_p},
         {DNNL_ARG_DST, *dst_memory_p}};
+    if (alpha != 1.0f) {
+      matmul_args.insert({DNNL_ARG_ATTR_SCALES | DNNL_ARG_DST, scale_mem});
+    }
 
     auto &astream = OneDNNContext::tls().get_stream();
     matmul_p->execute(astream, matmul_args);
