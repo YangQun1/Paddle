@@ -237,7 +237,8 @@ class FCMKLDNNHandler
       const dnnl::memory::desc& user_md,
       const dnnl::memory::desc& target_md,
       void* ptr,
-      const dnnl::primitive_attr& attrs) {
+      const dnnl::primitive_attr& attrs,
+      const std::vector<float>& scale_data) {
     std::shared_ptr<dnnl::memory> target_memory_p;
 
     auto user_memory_p =
@@ -246,6 +247,15 @@ class FCMKLDNNHandler
     auto reorder_p = std::make_shared<dnnl::reorder>(
         *user_memory_p, *target_memory_p, attrs);
 
+    auto scales_md =
+        dnnl::memory::desc({static_cast<int64_t>(scale_data.size())},
+                           dnnl::memory::data_type::f32,
+                           dnnl::memory::format_tag::x);
+    auto scale_mem =
+        dnnl::memory(scales_md,
+                     this->engine_,
+                     phi::funcs::to_void_cast<float>(scale_data.data()));
+
     auto& astream = OneDNNContext::tls().get_stream();
     {
       platform::RecordEvent record_reorder(
@@ -253,9 +263,10 @@ class FCMKLDNNHandler
           platform::TracerEventType::UserDefined,
           1,
           platform::EventRole::kUniqueOp);
-      reorder_p->execute(
-          astream,
-          {{DNNL_ARG_FROM, *user_memory_p}, {DNNL_ARG_TO, *target_memory_p}});
+      reorder_p->execute(astream,
+                         {{DNNL_ARG_FROM, *user_memory_p},
+                          {DNNL_ARG_TO, *target_memory_p},
+                          {DNNL_ARG_ATTR_SCALES | DNNL_ARG_DST, scale_mem}});
       astream.wait();
     }
 
@@ -274,7 +285,7 @@ class FCMKLDNNHandler
     if (x->dims().size() != 2) {
       // reshape restrictions are always satisfied because in case of 3 or 4 dim
       // input, plain layout is enforced
-      user_md = user_md.reshape(this->fwd_pd_->src_desc().dims());
+      user_md = user_md.reshape(this->fwd_pd_->src_desc().get_dims());
     }
 
     return this->AcquireMemoryWithReorder(
@@ -299,7 +310,7 @@ class FCMKLDNNHandler
         dnnl::primitive_attr attrs;
 
         int mask = CreateMask(0, scale_data.size() > 1);
-        attrs.set_output_scales(mask, scale_data);
+        attrs.set_scales_mask(DNNL_ARG_DST, mask);
 
         auto user_md = dnnl::memory::desc({bias->dims()[0]},
                                           OneDNNGetDataType<float>(),
@@ -309,7 +320,8 @@ class FCMKLDNNHandler
             user_md,
             this->fwd_pd_->bias_desc(),
             to_void_cast<float>(bias_data),
-            attrs);
+            attrs,
+            scale_data);
         this->dev_ctx_.SetBlob(bias_key, memory_p);
       }
       return memory_p;
@@ -324,7 +336,7 @@ class FCMKLDNNHandler
 
     if (!memory_p) {
       const float* weights_data = weights->data<float>();
-      auto weights_dims = this->fwd_pd_->weights_desc().dims();
+      auto weights_dims = this->fwd_pd_->weights_desc().get_dims();
 
       auto user_md = dnnl::memory::desc(weights_dims,
                                         OneDNNGetDataType<float>(),
@@ -409,7 +421,7 @@ class FCMKLDNNKernel : public framework::OpKernel<T_in> {
                      const std::shared_ptr<dnnl::memory>& src_mem,
                      const phi::DenseTensor* x,
                      const dnnl::engine& engine) const {
-    auto x_md = x->mem_desc().reshape(src_mem->get_desc().dims());
+    auto x_md = x->mem_desc().reshape(src_mem->get_desc().get_dims());
     if (x_md != src_mem->get_desc()) {
       dnnl::memory x_mem(x_md, engine, to_void_cast<T_in>(x->data<T_in>()));
       auto reorder_p = dnnl::reorder(x_mem, *src_mem);
