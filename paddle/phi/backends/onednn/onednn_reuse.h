@@ -1370,9 +1370,9 @@ class BatchNormOneDNNHandler
             scale_tz.size()));
 
     auto scale_memory = this->AcquireMemoryFromPrimitive(
-        this->fwd_pd_->weights_desc(), to_void_cast<DenseTensor>(scale));
+        this->fwd_pd_->weights_desc(), to_void_cast<T>(scale->data<T>()));
     auto shift_memory = this->AcquireMemoryFromPrimitive(
-        this->fwd_pd_->weights_desc(), to_void_cast<DenseTensor>(shift));
+        this->fwd_pd_->weights_desc(), to_void_cast<T>(shift->data<T>()));
 
     return std::make_tuple(scale_memory, shift_memory);
   }
