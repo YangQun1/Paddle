@@ -106,7 +106,7 @@ class MatmulOneDNNHandler : public OneDNNHandlerNoCachingT<XT, dnnl::matmul> {
                           ? PADDLE_GET_CONST(float, dev_ctx.GetDnnAttr("alpha"))
                           : 1.0f;
     if (scale_out != 1.0f) {
-      matmul_attrs.set_output_scales(0, {scale_out});
+      matmul_attrs.set_scales_mask(DNNL_ARG_SRC, 0);
     }
     matmul_attrs.set_post_ops(post_operations);
     return matmul_attrs;
